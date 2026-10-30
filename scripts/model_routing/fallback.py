@@ -66,7 +66,9 @@ def plan_fallback(
 
 def _fallback_spend_allowed(tool: str, routing: dict[str, Any], allow_extra_spend: bool) -> bool:
     cfg = (routing.get("tools") or {}).get(tool) or {}
-    if cfg.get("plan") != "extra":
+    default_plan = "extra" if tool == "claude_api" else "included"
+    plan = str(cfg.get("plan") or default_plan).strip().lower()
+    if plan not in {"extra", "bills_extra", "bills extra"}:
         return True
 
     policy = routing.get("extra_spend") or "deny"
