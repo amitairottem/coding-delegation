@@ -96,19 +96,24 @@ failed() { # surface command
 }
 
 check_claude_subscription() { # displayed-surface
-  local surface="$1" detail
+  local surface="$1" detail key_present=0
   command -v claude >/dev/null || { line "$surface" "not installed" "binary claude not on PATH"; return; }
-  run claude auth status --json
+  [ -n "${ANTHROPIC_API_KEY:-}" ] && key_present=1
+  # Verify the subscription/OAuth login with the API-key override removed.
+  # Otherwise a stray key could affect the very status check meant to validate
+  # the subscription path.
+  OUT="$( (unset ANTHROPIC_API_KEY; timeout "$TIMEOUT" claude auth status --json </dev/null) 2>&1 )"
+  RC=$?
   if echo "$OUT" | grep -Eq '"loggedIn"[[:space:]]*:[[:space:]]*true'; then
-    detail="claude auth status: loggedIn true"
-    if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-      detail="$detail; ANTHROPIC_API_KEY present and must be stripped by launch contract"
+    detail="claude auth status: loggedIn true (checked with ANTHROPIC_API_KEY unset)"
+    if [ "$key_present" = 1 ]; then
+      detail="$detail; ANTHROPIC_API_KEY present in parent and must be stripped by launch contract"
     fi
     login_ok "$surface" "$detail" "claude-code"
   elif echo "$OUT" | grep -Eq '"loggedIn"[[:space:]]*:[[:space:]]*false'; then
     line "$surface" "logged out" "run the Claude login flow in docs/agents/claude-code.md"
   else
-    failed "$surface" "claude auth status --json"
+    failed "$surface" "claude auth status --json (API key unset)"
   fi
 }
 
