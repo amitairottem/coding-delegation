@@ -2,11 +2,14 @@
 
 The router treats Claude subscription usage and Anthropic API-key usage as two separate pools.
 
-## Tool IDs
+## Tool IDs and aliases
 
 - `claude` — Claude Code authenticated with the Claude subscription (`claude auth login --claudeai`). This is the existing tool ID and remains backwards-compatible.
+- `claude_subscription` — accepted alias for `claude` in preference/order fields.
 - `claude_api` — Claude Code launched with `ANTHROPIC_API_KEY` present. This is a separate, opt-in pool.
-- `claude_subscription` is accepted as a preference alias for `claude`.
+- `claude_api_key` — accepted alias for `claude_api` in preference/order fields.
+
+The normalized routing IDs remain `claude` and `claude_api`.
 
 ## Billing safety
 
@@ -18,7 +21,7 @@ unset_env:
   - ANTHROPIC_API_KEY
 ```
 
-A runner must actually remove `ANTHROPIC_API_KEY` from the child process environment. Anthropic documents that an API key can take precedence over subscription authentication, so leaving it inherited could silently move a job onto API billing.
+The launch runner must actually remove `ANTHROPIC_API_KEY` from the child process environment. Leaving it inherited can cause a job intended for subscription capacity to use API-key billing instead.
 
 API launches return:
 
@@ -28,13 +31,22 @@ require_env:
   - ANTHROPIC_API_KEY
 ```
 
-The key itself is never copied into routing output or logs. A runner must fail closed if a required variable is absent.
+The key itself is never copied into routing output or logs. The launch runner must fail closed if a required variable is absent.
+
+`delegate-coding` defines the runner contract: `unset_env` and `require_env` are mandatory execution metadata, not advisory fields. `coding-preflight` also performs an explicit pool check before spawn:
+
+```bash
+bash scripts/auth-check.sh --only claude-subscription
+bash scripts/auth-check.sh --only claude-api
+```
+
+The API check verifies only that the Claude binary exists and that `ANTHROPIC_API_KEY` is non-empty. It does not print the key and does not make a billable API request.
 
 ## Default policy
 
 `claude_api` is disabled by default and its default plan is `extra`. That means simply having an API key in the environment cannot make the router spend against the API pool. A user must explicitly enable the tool and also allow extra spend according to the existing routing policy.
 
-If an organization has a separately enforced hard billing cap and intentionally wants to treat API credits as included capacity, the user may set the pool's plan to `included`. The router cannot independently verify the remaining Anthropic API-credit balance, so that choice should only be made when external billing controls make overage impossible or acceptable.
+Treat `plan: included` for `claude_api` as an advanced override. It disables the router's normal extra-spend consent gate for that pool. **Do not use it merely because the account currently has promotional or monthly API credits.** The router cannot verify remaining API credits or whether billing will continue after credits are exhausted. Use `included` only when an external billing control independently guarantees that the resulting spend behavior is acceptable.
 
 Example:
 
@@ -56,6 +68,14 @@ routing:
 ```
 
 This expresses the intended order: subscription capacity first, then the separately authorized API pool, then other tools.
+
+## Fallback
+
+Fallback does not bypass billing consent. If `claude_api` is configured as `plan: extra`, a subscription limit or stall may hand off to that pool only when the current job has the same extra-spend authorization that would have been required for an initial API launch. Otherwise the API pool is skipped and fallback continues to another eligible included tool, or stops and asks the user.
+
+## Usage reporting
+
+The router can read Claude subscription usage from Claude Code's `/usage` output. It does not query an Anthropic API-credit balance because this project has no non-billable balance query for that pool. Production routing therefore includes `claude_api` explicitly with unknown usage rather than inventing a balance.
 
 ## Logs
 
