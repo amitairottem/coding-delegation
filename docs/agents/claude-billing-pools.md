@@ -40,7 +40,7 @@ bash scripts/auth-check.sh --only claude-subscription
 bash scripts/auth-check.sh --only claude-api
 ```
 
-The API check verifies only that the Claude binary exists and that `ANTHROPIC_API_KEY` is non-empty. It does not validate whether the key is current, well-formed, or authorized; a revoked or malformed key can pass preflight and then fail when Claude actually launches. The check never prints the key and does not make a billable API request.
+The API check verifies only that the Claude binary exists and that `ANTHROPIC_API_KEY` is non-empty. It does not validate whether the key is current, well-formed, or authorized; a revoked or malformed key can pass preflight and then fail when Claude actually launches. In other words, preflight verifies configuration presence, not credential validity. The check never prints the key and does not make a billable API request.
 
 ## Default policy
 
